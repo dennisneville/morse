@@ -1,0 +1,9 @@
+{
+  "name": "morse",
+  "private": true,
+  "description": "Morse code by light and sound, in the browser.",
+  "scripts": {
+    "test": "node --test test/morse.test.js",
+    "e2e": "node test/e2e.js"
+  }
+}

@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Morse Light and Sound</title>
+<meta name="description" content="Send and receive Morse code with your phone's camera, microphone, screen and speaker.">
+<meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1b1b19" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root {
+  --bg: #f4f3ef; --card: #ffffff; --ink: #1f2328; --muted: #5f6368; --line: #e6e5e0;
+  --blue: #2a78d6; --good: #1a7f37; --warn: #b35900; --red: #c62828;
+  --on-blue: #ffffff;
+  --mono: ui-monospace, "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1b19; --card: #262624; --ink: #ecebe6; --muted: #a3a29c; --line: #3a3a37;
+    --blue: #5b9cf0; --good: #4cc26a; --warn: #f0a050; --red: #ef5350; --on-blue: #10151c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1b19; --card: #262624; --ink: #ecebe6; --muted: #a3a29c; --line: #3a3a37;
+  --blue: #5b9cf0; --good: #4cc26a; --warn: #f0a050; --red: #ef5350; --on-blue: #10151c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+main { max-width: 720px; margin: 0 auto; padding: 12px 16px 24px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 4px 0 10px; }
+h1 { font-size: 22px; font-weight: 700; margin: 0; }
+.sub { color: var(--muted); font-size: 12px; }
+
+.tabs, .seg { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; }
+.tabs { margin-bottom: 12px; background: var(--card); }
+.tabs button, .seg button {
+  flex: 1; min-height: 44px; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.tabs button[aria-selected="true"], .seg button[aria-pressed="true"] { background: var(--blue); color: var(--on-blue); }
+.seg { background: var(--card); }
+
+.card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+@media (max-width: 480px) { main { padding: 8px 8px 20px; } .card { padding: 14px; } }
+
+.label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin: 0 0 6px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > .grow { flex: 1; }
+.stack > * + * { margin-top: 12px; }
+
+button.btn {
+  min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer;
+}
+button.btn:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--blue); border-color: var(--blue); color: var(--on-blue); }
+button.sos { background: var(--red); border-color: var(--red); color: #fff; letter-spacing: .08em; }
+button.big { min-height: 52px; font-size: 16px; }
+button.wide { width: 100%; }
+
+.cam {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 8px; overflow: hidden;
+  touch-action: manipulation; cursor: crosshair;
+}
+.cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+.cam .roi {
+  position: absolute; border: 2px solid #ffd54a; border-radius: 6px; pointer-events: none; display: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .25);
+}
+.cam .hint {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; color: #fff; font-size: 12px; text-align: center;
+  background: rgba(0, 0, 0, .55); border-radius: 6px; padding: 4px 8px; pointer-events: none;
+}
+.cam .idle { position: absolute; inset: 0; display: grid; place-items: center; color: #bbb; font-size: 13px; text-align: center; padding: 16px; }
+
+canvas.scope { width: 100%; height: 64px; display: block; background: var(--bg); border-radius: 8px; }
+
+.status { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); min-height: 20px; }
+.status .ok { color: var(--good); font-weight: 600; }
+.status .wait { color: var(--muted); }
+.status .err { color: var(--warn); font-weight: 600; }
+
+.pattern { font: 700 26px/1.2 var(--mono); letter-spacing: .12em; min-height: 32px; color: var(--blue); }
+.decoded {
+  font: 18px/1.5 var(--mono); min-height: 96px; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  background: var(--bg); border-radius: 8px; padding: 10px 12px;
+}
+.decoded:empty::before { content: "Decoded text appears here."; color: var(--muted); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+textarea {
+  width: 100%; min-height: 110px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  background: var(--bg); color: var(--ink); font: 16px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+textarea:focus, input:focus-visible, button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.preview { font: 13px/1.5 var(--mono); color: var(--muted); word-break: break-word; max-height: 4.5em; overflow: hidden; }
+.now { font: 18px/1.5 var(--mono); word-break: break-word; min-height: 27px; }
+.now .cur { background: var(--blue); color: var(--on-blue); border-radius: 3px; }
+.now .done { color: var(--muted); }
+.now:empty { display: none; }
+.card > details:first-child { border-top: 0; padding-top: 0; }
+.swatches + .note { margin-top: 6px; }
+
+details { border-top: 1px solid var(--line); padding-top: 4px; }
+summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+details[open] summary::after { transform: rotate(180deg); }
+.setting { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.setting:last-child { border-bottom: 0; }
+.setting .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 32px; }
+.setting .val { font-weight: 700; white-space: nowrap; }
+.setting .note { font-size: 12px; color: var(--muted); }
+input[type="range"] { width: 100%; height: 32px; accent-color: var(--blue); }
+label.check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); }
+.swatches { display: flex; gap: 8px; }
+.swatches button { width: 44px; height: 44px; border-radius: 8px; border: 2px solid var(--line); cursor: pointer; }
+.swatches button[aria-pressed="true"] { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
+
+.flash {
+  position: fixed; inset: 0; z-index: 10; background: #000; display: none; cursor: pointer;
+  touch-action: manipulation; user-select: none;
+}
+.flash.show { display: block; }
+.flash .cap {
+  position: absolute; left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom)); text-align: center;
+  color: #777; font-size: 13px; mix-blend-mode: difference; padding: 0 16px;
+}
+.flash .cap b { font: 700 18px var(--mono); display: block; color: #888; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--ink); color: var(--card); padding: 8px 14px; border-radius: 8px; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; max-width: calc(100% - 32px);
+}
+.toast.show { opacity: 1; }
+footer { font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Morse</h1>
+    <span class="sub">Light and sound</span>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-receive" aria-selected="true" aria-controls="receive">Receive</button>
+    <button role="tab" id="tab-send" aria-selected="false" aria-controls="send">Send</button>
+  </div>
+
+  <!-- RECEIVE -->
+  <section id="receive" role="tabpanel" aria-labelledby="tab-receive">
+    <div class="card stack">
+      <div class="seg" id="source">
+        <button data-v="camera" aria-pressed="true">Camera</button>
+        <button data-v="mic" aria-pressed="false">Microphone</button>
+      </div>
+
+      <div class="cam" id="cam">
+        <video id="video" playsinline muted></video>
+        <div class="roi" id="roi"></div>
+        <div class="idle" id="camIdle">Press Start, then point the camera at the flashing light.</div>
+        <div class="hint" id="camHint" hidden>Tap the light to lock on</div>
+      </div>
+
+      <canvas class="scope" id="scope" aria-label="Signal level"></canvas>
+      <div class="status" id="rxStatus"><span class="wait">Not listening</span></div>
+
+      <div class="row">
+        <button class="btn primary big grow" id="rxStart">Start</button>
+        <button class="btn big" id="roiClear" hidden>Whole frame</button>
+      </div>
+    </div>
+
+    <div class="card stack">
+      <div>
+        <p class="label">Current letter</p>
+        <div class="pattern" id="pattern" aria-live="off"></div>
+      </div>
+      <div>
+        <p class="label">Decoded</p>
+        <div class="decoded" id="decoded" aria-live="polite"></div>
+      </div>
+      <div class="row">
+        <button class="btn grow" id="copyText">Copy</button>
+        <button class="btn grow" id="clearText">Clear</button>
+      </div>
+
+      <details id="rxSettings">
+        <summary>Receive settings</summary>
+        <div class="setting">
+          <div class="top">
+            <label class="check"><input type="checkbox" id="rxAutoSpeed"> Detect speed automatically</label>
+            <span class="val" id="rxWpmVal"></span>
+          </div>
+          <input type="range" id="rxWpm" min="5" max="40" step="1" aria-label="Receive speed in words per minute">
+          <div class="note">Auto copes with hand-keyed timing and speed changes. Fix the speed if the sender is very steady.</div>
+        </div>
+        <div class="setting" id="toneSetting">
+          <div class="top">
+            <label class="check"><input type="checkbox" id="rxAutoTone"> Find tone automatically</label>
+            <span class="val" id="rxToneVal"></span>
+          </div>
+          <input type="range" id="rxTone" min="300" max="1500" step="10" aria-label="Tone pitch in hertz">
+          <div class="note">Set the pitch by hand if there are other steady sounds nearby.</div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- SEND -->
+  <section id="send" role="tabpanel" aria-labelledby="tab-send" hidden>
+    <div class="card stack">
+      <div>
+        <p class="label">Message</p>
+        <textarea id="txText" placeholder="Type or paste a message" autocapitalize="characters" spellcheck="false"></textarea>
+      </div>
+      <div class="row">
+        <button class="btn grow" id="paste">Paste</button>
+        <button class="btn grow" id="txClear">Clear</button>
+      </div>
+      <div class="preview" id="txPreview"></div>
+
+      <div>
+        <p class="label">Send as</p>
+        <div class="seg" id="out">
+          <button data-v="sound" aria-pressed="true">Sound</button>
+          <button data-v="screen" aria-pressed="false">Screen</button>
+          <button data-v="both" aria-pressed="false">Both</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn primary big grow" id="txSend">Send</button>
+        <button class="btn sos big" id="sos" aria-label="Send SOS repeatedly">SOS</button>
+      </div>
+      <div class="now" id="txNow" aria-live="off"></div>
+    </div>
+
+    <div class="card">
+      <details id="txSettings">
+        <summary>Send settings</summary>
+        <div class="setting">
+          <div class="top"><span>Speed</span><span class="val" id="txWpmVal"></span></div>
+          <input type="range" id="txWpm" min="5" max="40" step="1" aria-label="Send speed in words per minute">
+          <div class="note">For a camera at the other end, 12 WPM or slower reads most reliably.</div>
+        </div>
+        <div class="setting">
+          <div class="top"><span>Farnsworth spacing</span><span class="val" id="txFwpmVal"></span></div>
+          <input type="range" id="txFwpm" min="5" max="40" step="1" aria-label="Farnsworth effective speed">
+          <div class="note">Letters stay at full speed with longer gaps between them. Easier to copy by ear.</div>
+        </div>
+        <div class="setting">
+          <div class="top"><span>Tone pitch</span><span class="val" id="txToneVal"></span></div>
+          <input type="range" id="txTone" min="300" max="1500" step="10" aria-label="Tone pitch in hertz">
+        </div>
+        <div class="setting">
+          <div class="top"><span>Volume</span><span class="val" id="txVolVal"></span></div>
+          <input type="range" id="txVol" min="0.05" max="1" step="0.05" aria-label="Volume">
+        </div>
+        <div class="setting">
+          <div class="top"><span>Flash colour</span></div>
+          <div class="swatches" id="swatches">
+            <button data-v="#ffffff" style="background:#ffffff" aria-label="White"></button>
+            <button data-v="#ff2a2a" style="background:#ff2a2a" aria-label="Red"></button>
+            <button data-v="#2aff5a" style="background:#2aff5a" aria-label="Green"></button>
+          </div>
+          <div class="note">Turn screen brightness up before sending. Browsers cannot change it.</div>
+        </div>
+        <div class="setting">
+          <label class="check"><input type="checkbox" id="txRepeat"> Repeat until stopped</label>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <footer>Works offline once loaded. Camera and microphone stay on this phone; nothing is uploaded.</footer>
+</main>
+
+<div class="flash" id="flash" role="button" aria-label="Tap to stop sending">
+  <div class="cap"><b id="flashChar"></b>Tap anywhere to stop</div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="morse.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
